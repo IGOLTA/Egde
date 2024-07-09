@@ -1,0 +1,11 @@
+[package]
+name = "Egde"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bytemuck = { version = "1.16.1", features = ["derive"] }
+glam = { version = "0.28.0", features = ["bytemuck"] }
+pollster = "0.3.0"
+sdl2 = { version = "0.37.0", features = ["raw-window-handle"] }
+wgpu = "0.20.1"
