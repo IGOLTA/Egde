@@ -1,19 +1,21 @@
 #[deny(deprecated)]
 
+pub mod script;
 pub mod scene;
 pub mod render;
 pub mod memory;
 
 use core::default::Default;
-use std::time::{Instant};
-use glam::{DQuat, Mat4, Quat, UVec3, Vec2, Vec3};
+use std::path::Path;
+use std::time::Instant;
+use glam::{Quat, UVec3, Vec3};
 use scene::camera::{Camera, CameraData};
 use scene::chunk::{self, Chunk};
-use sdl2::sys::SDL_GetTicks;
+use scene::Scene;
 use sdl2::video::Window;
 use sdl2::EventPump;
 use sdl2::event::{Event, WindowEvent};
-use sdl2::keyboard::{Keycode, Scancode};
+use sdl2::keyboard::Scancode;
 use wgpu::rwh::{HasRawDisplayHandle, HasRawWindowHandle};
 use wgpu::{Device, Queue, Surface, SurfaceConfiguration};
 
@@ -42,8 +44,7 @@ struct Game<'a> {
 
     last_frame: Instant,
 
-    camera: Camera,
-    test_chunk: Chunk
+    scene: Scene,
 }
 
 impl Game<'_> {
@@ -117,19 +118,18 @@ impl Game<'_> {
 
         let chunk_renderer = ChunkRenderer::new(&device);
 
-        let test_chunk = Chunk::new(&device, chunk::ChunkData{
-            size: UVec3::new(100, 100, 100),
-            position: Vec3::new(0., 0., 0.),
-            rotation: Quat::from_euler(glam::EulerRot::XYZ, 0., 0., 0.),
-        });
-
-        let camera = Camera::new(&device, CameraData {
+        let mut scene = Scene::new(&device, CameraData {
             position: Vec3::new(0., 0., 0.),
             near: 0.001,
             far: 100.,
             fov: std::f32::consts::PI * 100. / 180.,
             aspect_ratio: config.render_width as f32 / config.render_height as f32,
         });
+
+        scene.add_chunk(Chunk::from_file(&device,&queue, chunk::ChunkData{
+            position: Vec3::new(0., 0., 0.),
+            rotation: Quat::from_euler(glam::EulerRot::XYZ, 0., 0., 0.),
+        }, Path::new("C:/Users/igolt/Desktop/T-Rex.zip")).unwrap());
 
         Game {
             config,
@@ -142,8 +142,7 @@ impl Game<'_> {
             g_buffer,
             render_plane,
             chunk_renderer,
-            test_chunk,
-            camera,
+            scene: scene,
             last_frame: Instant::now(),
         }
     }
@@ -173,42 +172,7 @@ impl Game<'_> {
 
         }
         
-        //Handle input
-        let mut move_direction = Vec3::ZERO;
-        let speed: f32 = 5.;
-        let dash_speed: f32 = 8.;
-
-        let pressed_keys: Vec<Scancode> = self
-            .event_pump
-            .keyboard_state()
-            .scancodes()
-            .into_iter()
-            .filter(|(_, pressed)| *pressed)
-            .map(|(scan_code, _)| scan_code)
-            .collect();
-        
-        for key in pressed_keys {
-            match key {
-                Scancode::W => move_direction += Vec3::new(0., 0., 1.),
-                Scancode::S => move_direction += Vec3::new(0., 0., -1.),
-                Scancode::A => move_direction += Vec3::new(-1., 0., 0.),
-                Scancode::D => move_direction += Vec3::new(1., 0., 0.),
-                Scancode::Space => move_direction += Vec3::new(0., 1., 0.),
-                Scancode::LCtrl => move_direction += Vec3::new(0., -1., 0.),
-                _ => {}
-            }
-        }
-
-        if self.event_pump.keyboard_state().is_scancode_pressed(Scancode::LShift) {
-            move_direction *= dash_speed;
-        } else {
-            move_direction *= speed;
-        }
-
-        move_direction *= delta_time;
-
-        self.camera.move_towards(move_direction);
-        self.camera.update_uniform_buffer(&self.queue);
+        self.scene.update(&self.queue, delta_time, &self.event_pump);
 
         true
     }
@@ -221,7 +185,7 @@ impl Game<'_> {
             label: Some("Render Encoder"),
         });
 
-        self.chunk_renderer.render(&mut encoder, &self.device, &self.g_buffer, &self.test_chunk, &self.camera);
+        self.scene.render(&self.chunk_renderer, &self.device, &self.g_buffer, &mut encoder);
 
         self.render_plane.render(&mut encoder, &self.device, &view, &self.g_buffer);
 

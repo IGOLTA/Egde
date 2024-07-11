@@ -2,6 +2,8 @@ use std::mem;
 
 use wgpu::{util::{BufferInitDescriptor, DeviceExt}, BufferUsages, CommandEncoder, Device, Extent3d, ImageSubresourceRange, PipelineLayoutDescriptor, RenderPipelineDescriptor, Sampler, SurfaceConfiguration, TextureDescriptor, TextureDimension, TextureView};
 
+use crate::memory;
+
 use super::g_buffer::GBuffer;
 
 #[repr(C)]

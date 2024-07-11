@@ -3,14 +3,14 @@ use std::mem;
 use glam::Vec3;
 use wgpu::{util::{BufferInitDescriptor, DeviceExt}, BindGroupEntry, BufferUsages, CommandEncoder, Device, Extent3d, ImageSubresourceRange, PipelineLayoutDescriptor, RenderPipelineDescriptor, Sampler, SurfaceConfiguration, TextureDescriptor, TextureDimension, TextureView};
 
-use crate::scene::{camera::{self, Camera}, chunk::{self, Chunk}};
+use crate::{memory, scene::{camera::{self, Camera}, chunk::{self, Chunk}}};
 
 use super::{g_buffer::{self, GBuffer}, render_plane::VERTICES};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
-    position: Vec3,
+    position: [f32;3],
 }
 
 impl Vertex {
@@ -24,14 +24,14 @@ impl Vertex {
 }
 
 const CHUNK_VERTICES: &[Vertex] = &[
-    Vertex{position: Vec3::new(0., 0., 0.)},
-    Vertex{position: Vec3::new(1., 0., 0.)},
-    Vertex{position: Vec3::new(1., 1., 0.)},
-    Vertex{position: Vec3::new(0., 1., 0.)},
-    Vertex{position: Vec3::new(0., 0., 1.)},
-    Vertex{position: Vec3::new(1., 0., 1.)},
-    Vertex{position: Vec3::new(1., 1., 1.)},
-    Vertex{position: Vec3::new(0., 1., 1.)},
+    Vertex{position: [0., 0., 0.]},
+    Vertex{position: [1., 0., 0.]},
+    Vertex{position: [1., 1., 0.]},
+    Vertex{position: [0., 1., 0.]},
+    Vertex{position: [0., 0., 1.]},
+    Vertex{position: [1., 0., 1.]},
+    Vertex{position: [1., 1., 1.]},
+    Vertex{position: [0., 1., 1.]},
 ];    
 
 const CHUNK_INDICES: &[u16] = &[
@@ -49,22 +49,11 @@ pub struct ChunkRenderer {
     index_buffer: wgpu::Buffer,
     chunk_bind_group_layout: wgpu::BindGroupLayout,
     camera_bind_group_layout: wgpu::BindGroupLayout,
-    sampler: Sampler
 }
 
 impl ChunkRenderer {
 
     pub fn new(device: &Device) -> Self {
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
-        
         let chunk_layout = Chunk::generate_bind_group_layout(device);
         let camera_layout = Camera::generate_bind_group_layout(device);
 
@@ -92,7 +81,6 @@ impl ChunkRenderer {
             ),
             chunk_bind_group_layout: chunk_layout,
             camera_bind_group_layout: camera_layout,
-            sampler
         }
     }
 

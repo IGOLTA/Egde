@@ -28,6 +28,7 @@ var t_render: texture_2d<f32>;
 @group(0) @binding(1)
 var s_render: sampler;
 
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     return textureSample(t_render, s_render, in.uv);

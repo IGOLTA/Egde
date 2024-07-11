@@ -1,6 +1,14 @@
 use glam::{EulerRot, Mat4, Quat, Vec2, Vec3, Vec4, Vec4Swizzles};
 use wgpu::{util::{BufferInitDescriptor, DeviceExt}, BindGroup, BindGroupLayout, Buffer, BufferUsages, Device, Queue};
 
+#[rustfmt::skip]
+pub const OPENGL_TO_WGPU_MATRIX: Mat4 = Mat4::from_cols_array(&[
+    1.0, 0.0, 0.0, 0.0,
+    0.0, 1.0, 0.0, 0.0,
+    0.0, 0.0, 0.5, 0.0,
+    0.0, 0.0, 0.5, 1.0,
+]);
+
 pub struct Camera {
     pub data: CameraData,
     pub buffer: Buffer,
@@ -10,7 +18,7 @@ impl Camera {
     pub fn new(device: &Device, data: CameraData) -> Self {
         let buffer = device.create_buffer_init(&BufferInitDescriptor{
             label: Some("Camera buffer"),
-            contents: unsafe { crate::memory::any_as_u8_slice(&ChunkUniform::from_data(data)) },
+            contents: unsafe { crate::memory::any_as_u8_slice(&CameraUniform::from_data(data)) },
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
 
@@ -21,7 +29,7 @@ impl Camera {
     }
 
     pub fn update_uniform_buffer(&mut self, queue: &Queue) {
-        queue.write_buffer(&self.buffer, 0, unsafe { crate::memory::any_as_u8_slice(&ChunkUniform::from_data(self.data)) })
+        queue.write_buffer(&self.buffer, 0, unsafe { crate::memory::any_as_u8_slice(&CameraUniform::from_data(self.data)) })
     }
 
     pub fn generate_bind_group_layout(device: &Device) -> BindGroupLayout {
@@ -75,19 +83,21 @@ pub struct CameraData {
 
 #[repr(C, align(16))]
 #[derive(Debug, Copy, Clone)]
-pub struct ChunkUniform {
+pub struct CameraUniform {
     pub position: Vec3,
     pub transform: Mat4,
 }
 
-impl ChunkUniform {
+impl CameraUniform {
     fn from_data(data: CameraData) -> Self {
         let translation = Mat4::from_translation(-data.position);
         let perspective = Mat4::perspective_lh(data.fov, data.aspect_ratio, data.near, data.far);
 
-        ChunkUniform {
+        let transform = OPENGL_TO_WGPU_MATRIX * perspective * translation;
+
+        CameraUniform {
             position: data.position,
-            transform: perspective * translation,
+            transform,
         }
     }
 }

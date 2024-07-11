@@ -6,14 +6,14 @@ struct VertexInput {
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
-    @location(0) world_position: vec4<f32>,
-    @location(1) local_position: vec4<f32>
+    @location(0) local_position: vec4<f32>,
+    @location(1) world_position: vec4<f32>
 }
 
 struct ChunkUniform {
     size: vec3<u32>,
     transform: mat4x4<f32>,
-    invert_transform: mat4x4<f32>
+    invert_rotation: mat4x4<f32>
 }
 
 @group(0) @binding(0) 
@@ -31,16 +31,21 @@ var<uniform> camera: CameraUniform;
 fn vs_main( in: VertexInput,) -> VertexOutput {
     var out: VertexOutput;
     out.local_position = vec4<f32>(in.position, 1.0);
-    out.world_position = chunk.transform * out.local_position; 
+    out.world_position = chunk.transform * out.local_position;
     out.clip_position = camera.transform * out.world_position;
     return out;
 }
 
+@group(0) @binding(1)
+var t_albedo: texture_3d<f32>;
+@group(0) @binding(2)
+var c_sampler: sampler;
+
 // Fragment shader
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let world_ray_dir = in.world_position.xyz - camera.position;
-    let ray_dir = normalize(chunk.invert_transform * vec4<f32>(world_ray_dir, 1.0));
+    let ray = chunk.invert_rotation * (in.world_position - vec4<f32>(camera.position, 1));
+    let ray_dir = normalize(ray);
     let ray_pos =  vec3<f32>(in.local_position.x * f32(chunk.size.x), in.local_position.y * f32(chunk.size.y), in.local_position.z * f32(chunk.size.z));
 
     var map_pos = vec3<i32>(i32(ray_pos.x), i32(ray_pos.y), i32(ray_pos.z));
@@ -57,14 +62,14 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
      
     var mask = vec3<i32>(0, 0, 0);
-    var hit = false;
+    var color = vec4<f32>(0.0, 0.0, 0.0, 0.0);
     for (var i = 0; i < i32(chunk.size.x + chunk.size.y + chunk.size.z); i++) {
         if (map_pos.x < 0 || map_pos.y < 0 || map_pos.z < 0 || map_pos.x > i32(chunk.size.x) || map_pos.y > i32(chunk.size.y) || map_pos.z > i32(chunk.size.z)) {
             discard;
         }
 
-        if (hit_function(map_pos)) {
-            hit = true;
+        color = textureSample(t_albedo, c_sampler, vec3<f32>(f32(map_pos.x) / f32(chunk.size.x), f32(map_pos.y) / f32(chunk.size.y), f32(map_pos.z) / f32(chunk.size.z)));
+        if (color.x != 0.0) {
             break;
         }
 
@@ -86,9 +91,5 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             mask.z * ray_step.z
         );
     }
-    return vec4<f32>(0.2, 0.5, 0.7, 1.0);
-}
-
-fn hit_function(map_pos: vec3<i32>) -> bool {
-    return length(vec3<f32>(map_pos - vec3<i32>(50, 50, 50))) < 40.0;
+    return color;
 }
