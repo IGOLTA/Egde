@@ -3,20 +3,6 @@
 version = 3
 
 [[package]]
-name = "Egde"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "env_logger",
- "glam",
- "image",
- "pollster",
- "sdl2",
- "wgpu",
- "zip",
-]
-
-[[package]]
 name = "adler"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -582,6 +568,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ef5282ad69563b5fc40319526ba27e0e7363d552a896f0297d54f767717f9b95"
 dependencies = [
  "litrs",
+]
+
+[[package]]
+name = "egde"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "env_logger",
+ "glam",
+ "image",
+ "pollster",
+ "sdl2",
+ "wgpu",
+ "zip",
 ]
 
 [[package]]
