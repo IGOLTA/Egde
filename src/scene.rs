@@ -1,13 +1,16 @@
-use std::collections::LinkedList;
+use std::collections::{HashMap, HashSet, LinkedList};
 
 use camera::{Camera, CameraData};
-use chunk::Chunk;
+use chunk::{chunk_content::ChunkContentLoadingError, Chunk, UnloadedChunk};
 use glam::Vec3;
+use script::Script;
 use sdl2::{keyboard::Scancode, EventPump};
-use wgpu::{CommandEncoder, Device, Queue};
+use uuid::Uuid;
+use wgpu::{core::device::queue, CommandEncoder, Device, Queue};
 
-use crate::render::{chunk_renderer::{self, ChunkRenderer}, g_buffer::GBuffer};
+use crate::{render::{chunk_renderer::{self, ChunkRenderer}, g_buffer::GBuffer}};
 
+pub mod script;
 pub mod chunk;
 pub mod camera;
 
@@ -15,62 +18,66 @@ pub const VOXEL_SIZE: f32 = 0.1;
 
 pub struct Scene {
     camera: Camera,
-    chunks: LinkedList<Chunk>,
+    chunks: HashMap<Uuid, Chunk>,
+    scripts: HashMap<(), Box<dyn Script>>
 }
 
 impl Scene {
-    pub fn new(device: &Device, camera_data: CameraData) -> Self {
-        Self {
-            chunks: LinkedList::new(),
-            camera: Camera::new(device, camera_data)
-        }
+    pub fn add_chunk(&mut self, chunk: Chunk) {
+        self.chunks.insert(Uuid::new_v4(), chunk);
     }
 
-    pub fn add_chunk(&mut self, chunk: Chunk) {
-        self.chunks.push_back(chunk);
+    pub fn add_script(&mut self, script: Box<dyn Script>) {
+        self.scripts.insert((), script);
     }
 
     pub fn render(&self, chunk_renderer: &ChunkRenderer, device: &Device, g_buffer: &GBuffer, encoder: &mut CommandEncoder) {
-        for chunk in self.chunks.iter() {
+        for (_uuid, chunk) in self.chunks.iter() {
             chunk_renderer.render(encoder, device, g_buffer, chunk, &self.camera);
         }
     }
 
     pub fn update(& mut self, queue: &Queue, delta_time: f32, event_pump: &EventPump) {
-        let mut move_direction = Vec3::ZERO;
-        let speed: f32 = 5.;
-        let dash_speed: f32 = 8.;
+        for script in self.scripts.values_mut().into_iter() {
+            script.update(&mut self.chunks, &mut self.camera, delta_time, event_pump, queue);
+        }
+    }
+}
 
-        let pressed_keys: Vec<Scancode> = event_pump
-        .keyboard_state()
-        .scancodes()
-        .into_iter()
-        .filter(|(_, pressed)| *pressed)
-        .map(|(scan_code, _)| scan_code)
-        .collect();
-    
 
-        for key in pressed_keys {
-            match key {
-                Scancode::W => move_direction += Vec3::new(0., 0., 1.),
-                Scancode::S => move_direction += Vec3::new(0., 0., -1.),
-                Scancode::A => move_direction += Vec3::new(-1., 0., 0.),
-                Scancode::D => move_direction += Vec3::new(1., 0., 0.),
-                Scancode::Space => move_direction += Vec3::new(0., 1., 0.),
-                Scancode::LCtrl => move_direction += Vec3::new(0., -1., 0.),
-                _ => {}
-            }
+pub struct UnloadedScene {
+    chunks: HashMap<Uuid, UnloadedChunk>,
+    camera_data: CameraData,
+    scripts: HashMap<(), Box<dyn Script>>
+}
+
+impl UnloadedScene {
+    pub fn new(camera_data: CameraData) -> Self {
+        Self{
+            chunks: HashMap::new(),
+            camera_data: camera_data,
+            scripts: HashMap::new()
+        }
+    }
+
+    pub fn load(self, device: &Device, queue: &Queue, aspect_ratio:f32) -> Result<Scene, ChunkContentLoadingError> {
+        let mut chunks = HashMap::<Uuid, Chunk>::new();
+        for (uuid, chunk) in self.chunks {
+            chunks.insert(uuid, chunk.load(device, queue)?);
         }
 
-        if event_pump.keyboard_state().is_scancode_pressed(Scancode::LShift) {
-            move_direction *= dash_speed;
-        } else {
-            move_direction *= speed;
-        }
+        Ok(Scene {
+            chunks,
+            camera: Camera::new(device, self.camera_data, aspect_ratio),
+            scripts: self.scripts
+        })
+    }
 
-        move_direction *= delta_time;
+    pub fn add_chunk(&mut self, chunk: UnloadedChunk) {
+        self.chunks.insert(Uuid::new_v4(), chunk);
+    }
 
-        self.camera.move_towards(move_direction);
-        self.camera.update_uniform_buffer(queue);
+    pub fn add_script(&mut self, script: Box<dyn Script>) {
+        self.scripts.insert((), script);
     }
 }

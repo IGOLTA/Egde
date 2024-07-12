@@ -10,5 +10,6 @@ glam = { version = "0.28.0", features = ["bytemuck"] }
 image = "0.25.1"
 pollster = "0.3.0"
 sdl2 = { version = "0.37.0", features = ["raw-window-handle"] }
+uuid = { version = "1.10.0", features = ["v4"] }
 wgpu = "0.20.1"
 zip = "2.1.3"

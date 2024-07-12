@@ -11,25 +11,27 @@ pub const OPENGL_TO_WGPU_MATRIX: Mat4 = Mat4::from_cols_array(&[
 
 pub struct Camera {
     pub data: CameraData,
+    pub aspect_ratio: f32,
     pub buffer: Buffer,
 }
 
 impl Camera {
-    pub fn new(device: &Device, data: CameraData) -> Self {
+    pub fn new(device: &Device, data: CameraData, aspect_ratio: f32) -> Self {
         let buffer = device.create_buffer_init(&BufferInitDescriptor{
             label: Some("Camera buffer"),
-            contents: unsafe { crate::memory::any_as_u8_slice(&CameraUniform::from_data(data)) },
+            contents: unsafe { crate::memory::any_as_u8_slice(&CameraUniform::from_data(data, aspect_ratio)) },
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
 
         Self {
             data,
+            aspect_ratio,
             buffer
         }
     }
 
     pub fn update_uniform_buffer(&mut self, queue: &Queue) {
-        queue.write_buffer(&self.buffer, 0, unsafe { crate::memory::any_as_u8_slice(&CameraUniform::from_data(self.data)) })
+        queue.write_buffer(&self.buffer, 0, unsafe { crate::memory::any_as_u8_slice(&CameraUniform::from_data(self.data, self.aspect_ratio)) })
     }
 
     pub fn generate_bind_group_layout(device: &Device) -> BindGroupLayout {
@@ -78,7 +80,6 @@ pub struct CameraData {
     pub near: f32,
     pub far: f32,
     pub fov: f32,
-    pub aspect_ratio: f32,
 }
 
 #[repr(C, align(16))]
@@ -89,9 +90,9 @@ pub struct CameraUniform {
 }
 
 impl CameraUniform {
-    fn from_data(data: CameraData) -> Self {
+    fn from_data(data: CameraData, aspect_ratio: f32) -> Self {
         let translation = Mat4::from_translation(-data.position);
-        let perspective = Mat4::perspective_lh(data.fov, data.aspect_ratio, data.near, data.far);
+        let perspective = Mat4::perspective_lh(data.fov, aspect_ratio, data.near, data.far);
 
         let transform = OPENGL_TO_WGPU_MATRIX * perspective * translation;
 

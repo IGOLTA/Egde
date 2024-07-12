@@ -1,11 +1,10 @@
 use std::mem;
 
-use glam::Vec3;
-use wgpu::{util::{BufferInitDescriptor, DeviceExt}, BindGroupEntry, BufferUsages, CommandEncoder, Device, Extent3d, ImageSubresourceRange, PipelineLayoutDescriptor, RenderPipelineDescriptor, Sampler, SurfaceConfiguration, TextureDescriptor, TextureDimension, TextureView};
+use wgpu::{util::{BufferInitDescriptor, DeviceExt}, BufferUsages, CommandEncoder, Device, PipelineLayoutDescriptor, RenderPipelineDescriptor};
 
-use crate::{memory, scene::{camera::{self, Camera}, chunk::{self, Chunk}}};
+use crate::scene::{camera::Camera, chunk::Chunk};
 
-use super::{g_buffer::{self, GBuffer}, render_plane::VERTICES};
+use super::g_buffer::{self, GBuffer};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]

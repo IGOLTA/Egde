@@ -10,12 +10,12 @@ pub struct GBuffer {
 }
 
 impl GBuffer {
-    pub fn new(device: &Device, config: GameConfig) -> Self {
+    pub fn new(device: &Device, render_width: u32, render_height: u32) -> Self {
         let albedo = device.create_texture(&TextureDescriptor { 
             label: Some("GBuffer albedo"), 
             size: Extent3d {
-                width: config.render_width,
-                height: config.render_height,
+                width: render_width,
+                height: render_height,
                 depth_or_array_layers: 1,
             }, 
             mip_level_count: 1, 

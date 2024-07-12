@@ -1,10 +1,10 @@
-mod chunk_content;
+pub mod chunk_content;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use chunk_content::{ChunkContent, ChunkContentLoadingError};
 use glam::{Mat4, Quat, UVec3, Vec3};
-use wgpu::{ util::{BufferInitDescriptor, DeviceExt}, BindGroup, BindGroupLayout, Buffer, BufferUsages, Device, Queue, Sampler};
+use wgpu::{ core::device::queue, util::{BufferInitDescriptor, DeviceExt}, BindGroup, BindGroupLayout, Buffer, BufferUsages, Device, Queue, Sampler};
 
 pub struct Chunk {
     pub data: ChunkData,
@@ -17,7 +17,7 @@ pub struct Chunk {
 }
 
 impl Chunk {
-    pub fn from_file(device: &Device, queue: &Queue, data: ChunkData, content_path: &Path) -> Result<Chunk, ChunkContentLoadingError> {
+    fn from_file(device: &Device, queue: &Queue, data: ChunkData, content_path: &Path) -> Result<Chunk, ChunkContentLoadingError> {
         let chunk_content = ChunkContent::from_chunk_file(device, queue, content_path)?;
         
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -133,4 +133,16 @@ impl ChunkUniform {
         }
     }
 
+}
+
+
+pub struct UnloadedChunk {
+    pub content_path: PathBuf,
+    pub chunk_data: ChunkData
+}
+
+impl UnloadedChunk {
+    pub fn load(self, device: &Device, queue: &Queue) -> Result<Chunk, ChunkContentLoadingError> {
+        Chunk::from_file(device, queue, self.chunk_data, &self.content_path)
+    }
 }
