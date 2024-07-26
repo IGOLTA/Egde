@@ -3,17 +3,20 @@
 pub mod scene;
 pub mod render;
 pub mod memory;
+pub mod egui;
 
 use core::default::Default;
 use std::path::Path;
 use std::time::Instant;
-use glam::{Quat, UVec3, Vec3};
+use ::egui::{Context, FullOutput};
+use egui_wgpu_backend::ScreenDescriptor;
+use glam::{UVec3, Vec3};
 use scene::camera::{Camera, CameraData};
 use scene::chunk::chunk_content::ChunkContentLoadingError;
 use scene::chunk::{self, Chunk};
 use scene::{Scene, UnloadedScene};
 use sdl2::video::Window;
-use sdl2::EventPump;
+use sdl2::{EventPump, VideoSubsystem};
 use sdl2::event::{Event, WindowEvent};
 use sdl2::keyboard::Scancode;
 use wgpu::rwh::{HasRawDisplayHandle, HasRawWindowHandle};
@@ -44,24 +47,30 @@ pub struct Game<'a> {
     chunk_renderer: ChunkRenderer,
     g_buffer: GBuffer,
 
+    game_start: Instant,
     last_frame: Instant,
 
     current_scene: Option<Scene>,
+
+    egui_context: Context,
+    egui_r_pass: egui_wgpu_backend::RenderPass,
+    full_output: Option<FullOutput>,
 }
 
 impl Game<'_> {
+    
     pub async fn new(config: GameConfig) -> Self {
         let sdl_context = sdl2::init().unwrap();
         let video_subsystem = sdl_context.video().unwrap();
-        
+
         let window = video_subsystem.window(&config.game_name, config.window_width, config.window_height)
             .position_centered()
             .borderless()
             .build()
             .unwrap();
         
-        sdl_context.mouse().show_cursor(false);
-        sdl_context.mouse().set_relative_mouse_mode(true);
+        sdl_context.mouse().show_cursor(true);
+        sdl_context.mouse().set_relative_mouse_mode(false);
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::VULKAN,
@@ -120,6 +129,9 @@ impl Game<'_> {
 
         let chunk_renderer = ChunkRenderer::new(&device);
 
+        let egui_context = Context::default();
+
+        let egui_r_pass = egui_wgpu_backend::RenderPass::new(&device, surface_format, 1);
 
         Game {
             config,
@@ -133,7 +145,11 @@ impl Game<'_> {
             render_plane,
             chunk_renderer,
             last_frame: Instant::now(),
+            game_start: Instant::now(),
             current_scene: None,
+            egui_context,
+            egui_r_pass,
+            full_output: None
         }
     }
 
@@ -165,6 +181,7 @@ impl Game<'_> {
         self.last_frame = Instant::now();
 
         //Poll events
+        let mut events = Vec::<Event>::new();
         while let Some(event) = self.event_pump.poll_event() {
             match event {
                 Event::Quit {..} => return false,
@@ -179,16 +196,32 @@ impl Game<'_> {
                 }
                 _ => {}
             }
+
+            events.push(event);
         }
+
+        let raw_input: ::egui::RawInput = crate::egui::collect_raw_input(&self, delta_time, &events);
         if let Some(ref mut scene) = self.current_scene {
             scene.update(&self.queue, delta_time, &self.event_pump);
         }
 
+        self.full_output = Some(self.egui_context.run(raw_input, |ctx| {
+            let frame =  ::egui::containers::Frame {
+                ..Default::default()
+            }; 
+            ::egui::CentralPanel::default().frame(frame).show(&ctx, |ui| {
+                ui.label("Hello world!");
+                if ui.button("Click me").clicked() {
+                    println!("Clicked");
+                }
+            
+            });
+        }));
 
         true
     }
 
-    fn render(& self) -> Result<(), wgpu::SurfaceError>{
+    fn render(& mut self) -> Result<(), wgpu::SurfaceError>{
         let output = self.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
 
@@ -201,7 +234,32 @@ impl Game<'_> {
         }
 
         self.render_plane.render(&mut encoder, &self.device, &view, &self.g_buffer);
+       
+        if let Some(full_output) = &self.full_output {
+            let clipped_primitives = self.egui_context.tessellate(full_output.shapes.clone(), full_output.pixels_per_point);
 
+            self.egui_r_pass
+                .add_textures(&self.device, &self.queue, &full_output.textures_delta)
+                .expect("EGUI: Failed to add textures to render passs");
+    
+            let screen_descriptor = ScreenDescriptor {
+                    physical_width: self.surface_config.width,
+                    physical_height: self.surface_config.height,
+                    scale_factor: 1.0,
+            };
+    
+            self.egui_r_pass.update_buffers(&self.device, &self.queue, &clipped_primitives, &screen_descriptor);
+            
+            self.egui_r_pass
+                .execute(
+                    &mut encoder,
+                    &view,
+                    &clipped_primitives,
+                    &screen_descriptor,
+                    None,
+                )
+                .unwrap();
+        }
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
     
